@@ -1,3 +1,4 @@
+
 name: Deploy Crow Desk Employee Portal
 
 on:
@@ -16,6 +17,7 @@ concurrency:
 
 jobs:
   deploy:
+    name: Build and deploy to Hostinger
     runs-on: ubuntu-latest
     timeout-minutes: 25
 
@@ -28,26 +30,43 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Enable Next.js Standalone Output
+      - name: Configure Next.js Static Export
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
+          set -euo pipefail
 
-          config = Path("next.config.ts")
-          content = config.read_text(encoding="utf-8")
-          marker = "const nextConfig: NextConfig = {"
+          cat > next.config.ts <<'CONFIG'
+          import type { NextConfig } from "next";
 
-          if 'output: "standalone"' not in content:
-              if marker not in content:
-                  raise SystemExit("Could not locate nextConfig declaration.")
+          const nextConfig: NextConfig = {
+            output: "export",
+            trailingSlash: true,
+            poweredByHeader: false,
+            reactStrictMode: true,
+          };
 
-              content = content.replace(
-                  marker,
-                  marker + '\n  output: "standalone",',
-                  1,
-              )
-              config.write_text(content, encoding="utf-8")
-          PY
+          export default nextConfig;
+          CONFIG
+
+      - name: Configure Static Website Security Headers
+        run: |
+          set -euo pipefail
+
+          mkdir -p public
+
+          cat > public/.htaccess <<'HTACCESS'
+          Options -Indexes
+          DirectoryIndex index.html
+
+          <IfModule mod_headers.c>
+            Header always set X-Content-Type-Options "nosniff"
+            Header always set X-Frame-Options "DENY"
+            Header always set Referrer-Policy "strict-origin-when-cross-origin"
+            Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
+            Header always set Cross-Origin-Opener-Policy "same-origin"
+            Header always set Strict-Transport-Security "max-age=31536000"
+            Header always set Content-Security-Policy "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; img-src 'self' data: https:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; script-src 'self' 'unsafe-inline'; connect-src 'self' https://crowdesk.crowdemo.com; upgrade-insecure-requests"
+          </IfModule>
+          HTACCESS
 
       - name: Install NPM Dependencies
         run: npm install --no-audit --no-fund
@@ -58,35 +77,28 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Build Production Application
+      - name: Build Static Production Application
         run: npm run build
         env:
           NEXT_PUBLIC_API_URL: https://crowdesk.crowdemo.com/api/v1
           NEXT_PUBLIC_APP_NAME: Crow Desk
           NEXT_TELEMETRY_DISABLED: "1"
 
-      - name: Prepare Deployment Files
+      - name: Verify Static Build
         run: |
           set -euo pipefail
 
-          test -f .next/standalone/server.js
-          test -d .next/static
+          test -f out/index.html
+          test -f out/login/index.html
+          test -f out/dashboard/index.html
+          test -d out/_next/static
 
-          mkdir -p deploy-bundle/.next
-          cp -a .next/standalone/. deploy-bundle/
+          cp public/.htaccess out/.htaccess
+          test -f out/.htaccess
 
-          mkdir -p deploy-bundle/.next/static
-          cp -a .next/static/. deploy-bundle/.next/static/
+          echo "Static production build verified."
 
-          if [ -d public ]; then
-            mkdir -p deploy-bundle/public
-            cp -a public/. deploy-bundle/public/
-          fi
-
-          test -f deploy-bundle/server.js
-          echo "Standalone application prepared successfully."
-
-      - name: Configure SSH Key
+      - name: Configure SSH
         env:
           SSH_PRIVATE_KEY: ${{ secrets.SSH_PASSWORD }}
           SSH_HOST: ${{ secrets.SSH_HOST }}
@@ -114,15 +126,15 @@ jobs:
             IdentityFile $HOME/.ssh/id_rsa
             IdentitiesOnly yes
             StrictHostKeyChecking no
-            UserKnownHostsFile /dev/null
           EOF
 
           chmod 600 "$HOME/.ssh/config"
 
-          ssh -F "$HOME/.ssh/config" production \
-            "printf 'SSH connection successful\n'"
+          ssh -F "$HOME/.ssh/config" \
+            -o ConnectTimeout=20 \
+            production "printf 'SSH connection successful\n'"
 
-      - name: Synchronize Files to Hostinger
+      - name: Synchronize Website to Hostinger
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
@@ -134,35 +146,28 @@ jobs:
             --archive \
             --compress \
             --delete \
-            --exclude=".env" \
-            --exclude=".env.*" \
-            --exclude=".htaccess" \
             --exclude=".well-known/" \
-            --exclude="tmp/" \
             -e "ssh -F $HOME/.ssh/config" \
-            deploy-bundle/ \
+            out/ \
             "production:${DEPLOY_PATH%/}/"
 
-      - name: Verify Deployment and Restart Application
+      - name: Verify Deployed Website
         env:
           DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
         run: |
           set -euo pipefail
 
-          ssh -F "$HOME/.ssh/config" production \
-            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'EOF'
+          ssh -F "$HOME/.ssh/config" \
+            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
           set -euo pipefail
 
           cd "$DEPLOY_PATH"
 
-          test -f server.js
-          test -d .next/static
+          test -s index.html
+          test -s login/index.html
+          test -s dashboard/index.html
+          test -d _next/static
+          test -s .htaccess
 
-          node --version
-
-          mkdir -p tmp
-          touch tmp/restart.txt
-
-          echo "Crow Desk deployment files verified."
-          echo "Restart signal written."
-          EOF
+          echo "Crow Desk static website deployed successfully."
+          REMOTE
