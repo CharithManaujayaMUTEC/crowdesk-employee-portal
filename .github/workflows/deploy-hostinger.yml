@@ -1,0 +1,173 @@
+
+name: Deploy Crow Desk Employee Portal
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crowdesk-employee-portal-production
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Enable Next.js Standalone Output
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          config = Path("next.config.ts")
+          content = config.read_text(encoding="utf-8")
+          marker = "const nextConfig: NextConfig = {"
+
+          if 'output: "standalone"' not in content:
+              if marker not in content:
+                  raise SystemExit("Could not locate nextConfig declaration.")
+
+              content = content.replace(
+                  marker,
+                  marker + '\n  output: "standalone",',
+                  1,
+              )
+              config.write_text(content, encoding="utf-8")
+          PY
+
+      - name: Install NPM Dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: TypeScript Validation
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Build Production Application
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: https://crowdesk.crowdemo.com/api/v1
+          NEXT_PUBLIC_APP_NAME: Crow Desk
+          NEXT_TELEMETRY_DISABLED: "1"
+
+      - name: Prepare Deployment Files
+        run: |
+          set -euo pipefail
+
+          test -f .next/standalone/server.js
+          test -d .next/static
+
+          mkdir -p deploy-bundle/.next
+          cp -a .next/standalone/. deploy-bundle/
+
+          mkdir -p deploy-bundle/.next/static
+          cp -a .next/static/. deploy-bundle/.next/static/
+
+          if [ -d public ]; then
+            mkdir -p deploy-bundle/public
+            cp -a public/. deploy-bundle/public/
+          fi
+
+          test -f deploy-bundle/server.js
+
+          echo "Standalone application prepared successfully."
+
+      - name: Configure SSH Key
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PASSWORD }}
+          SSH_HOST: ${{ secrets.SSH_HOST }}
+          SSH_USER: ${{ secrets.SSH_USER }}
+          SSH_PORT: ${{ secrets.SSH_PORT }}
+          SSH_KNOWN_HOSTS: ${{ secrets.SSH_KNOWN_HOSTS }}
+        run: |
+          set -euo pipefail
+
+          : "${SSH_PRIVATE_KEY:?Missing SSH_PASSWORD secret}"
+          : "${SSH_HOST:?Missing SSH_HOST secret}"
+          : "${SSH_USER:?Missing SSH_USER secret}"
+          : "${SSH_KNOWN_HOSTS:?Missing SSH_KNOWN_HOSTS secret}"
+
+          mkdir -p "$HOME/.ssh"
+          chmod 700 "$HOME/.ssh"
+
+          printf '%s\n' "$SSH_PRIVATE_KEY" > "$HOME/.ssh/id_rsa"
+          chmod 600 "$HOME/.ssh/id_rsa"
+
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 600 "$HOME/.ssh/known_hosts"
+
+          cat > "$HOME/.ssh/config" <<EOF
+          Host production
+            HostName ${SSH_HOST}
+            User ${SSH_USER}
+            Port ${SSH_PORT:-65002}
+            IdentityFile $HOME/.ssh/id_rsa
+            IdentitiesOnly yes
+            UserKnownHostsFile $HOME/.ssh/known_hosts
+            StrictHostKeyChecking yes
+          EOF
+
+          chmod 600 "$HOME/.ssh/config"
+
+          ssh -F "$HOME/.ssh/config" production \
+            "printf 'SSH connection successful\n'"
+
+      - name: Synchronize Files to Hostinger
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+
+          : "${DEPLOY_PATH:?Missing DEPLOY_PATH secret}"
+
+          rsync \
+            --archive \
+            --compress \
+            --delete \
+            --exclude=".env" \
+            --exclude=".env.*" \
+            --exclude=".htaccess" \
+            --exclude="tmp/" \
+            -e "ssh -F $HOME/.ssh/config" \
+            deploy-bundle/ \
+            "production:${DEPLOY_PATH%/}/"
+
+      - name: Verify Deployment and Restart Application
+        env:
+          DEPLOY_PATH: ${{ secrets.DEPLOY_PATH }}
+        run: |
+          set -euo pipefail
+
+          ssh -F "$HOME/.ssh/config" production \
+            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'EOF'
+          set -euo pipefail
+
+          cd "$DEPLOY_PATH"
+
+          test -f server.js
+          test -d .next/static
+
+          node --version
+
+          mkdir -p tmp
+          touch tmp/restart.txt
+
+          echo "Crow Desk deployment files verified."
+          echo "Restart signal written."
+          EOF
