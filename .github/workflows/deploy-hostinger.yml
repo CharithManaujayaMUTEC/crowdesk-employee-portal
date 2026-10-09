@@ -160,16 +160,10 @@ jobs:
           : "${DEPLOY_PATH:?Missing DEPLOY_PATH secret}"
 
           ssh -F "$HOME/.ssh/config" production \
-            "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
-          set -euo pipefail
-
-          cd "$DEPLOY_PATH"
-
-          test -s index.html
-          test -s login/index.html
-          test -s dashboard/index.html
-          test -d _next/static
-          test -s .htaccess
-
-          echo "Crow Desk website deployed and verified successfully."
-          REMOTE            
+            "cd '$DEPLOY_PATH' &&
+             test -s index.html &&
+             test -s login/index.html &&
+             test -s dashboard/index.html &&
+             test -d _next/static &&
+             test -s .htaccess &&
+             echo 'Crow Desk website deployed and verified successfully.'"
