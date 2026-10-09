@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { CalendarDays, CalendarPlus, Check, CircleX, Plus, Send } from "lucide-react";
 import { api, asArray } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
@@ -19,7 +19,7 @@ export default function LeavesPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!token) return;
     setLoading(true); setError("");
     try {
@@ -28,8 +28,8 @@ export default function LeavesPage() {
       setLeaves(asArray<LeaveRequest>(leaveResponse));
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load leave data."); }
     finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, [token]);
+  }, [token]);
+  useEffect(() => { void load(); }, [load]);
 
   async function submit(e: FormEvent) {
     e.preventDefault(); setSaving(true); setError(""); setSuccess("");

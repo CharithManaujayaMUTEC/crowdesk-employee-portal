@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Check, CheckCircle2, Circle, Clock3, ListTodo, RotateCcw } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
+import { Check, CheckCircle2, Clock3, ListTodo, RotateCcw } from "lucide-react";
 import { api, asArray } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
 import type { EmployeeTask } from "@/lib/types";
@@ -14,14 +14,14 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<number | null>(null);
   const [error, setError] = useState("");
-  async function load() {
+  const load = useCallback(async () => {
     if (!token) return;
     setLoading(true); setError("");
     try { setTasks(asArray<EmployeeTask>(await api<unknown>("/tasks?per_page=100", {}, token))); }
     catch (e) { setError(e instanceof Error ? e.message : "Could not load tasks."); }
     finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, [token]);
+  }, [token]);
+  useEffect(() => { void load(); }, [load]);
 
   async function update(task: EmployeeTask, status: EmployeeTask["status"]) {
     setBusyId(task.id); setError("");

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Activity, CalendarDays, Clock3, Download, Filter } from "lucide-react";
 import { api, asArray } from "@/lib/api";
 import { useAuth } from "@/components/AuthProvider";
@@ -14,7 +14,7 @@ export default function AttendancePage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  async function load() {
+  const load = useCallback(async () => {
     if (!token) return;
     setLoading(true); setError("");
     try {
@@ -25,8 +25,8 @@ export default function AttendancePage() {
       setItems(asArray<Attendance>(result));
     } catch (e) { setError(e instanceof Error ? e.message : "Unable to load attendance."); }
     finally { setLoading(false); }
-  }
-  useEffect(() => { load(); }, [token]);
+  }, [token, from, to]);
+  useEffect(() => { void load(); }, [load]);
 
   function exportCsv() {
     const header = ["Date", "Check in", "Check out", "Status", "Late minutes", "Working hours"];
