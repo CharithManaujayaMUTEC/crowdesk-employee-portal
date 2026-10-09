@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Activity, CalendarDays, CheckSquare, ChevronDown, ClipboardCheck, LayoutDashboard, LogOut, Menu, UserRound, X, Bird } from "lucide-react";
@@ -35,7 +36,7 @@ export default function PortalShell({ children }: { children: React.ReactNode })
     <div className="app-frame">
       <aside className={`sidebar ${mobileOpen ? "sidebar-open" : ""}`}>
         <div className="brand">
-          <div className="brand-mark"><Bird size={24} strokeWidth={2.2} /></div>
+          <div className="brand-mark"><Image src="/crow-logo.png" alt="Crow.lk logo" width={28} height={28} priority /></div>
           <div><div className="brand-name">CROW<span>DESK</span></div><div className="brand-subtitle">Employee workspace</div></div>
           <button className="icon-button mobile-close" onClick={() => setMobileOpen(false)} aria-label="Close navigation"><X size={19} /></button>
         </div>

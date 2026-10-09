@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Image from "next/image";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bird, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/components/AuthProvider";
 
 function LoginForm() {
@@ -35,7 +36,7 @@ function LoginForm() {
 
   return <main className="login-screen">
     <div className="login-left">
-      <div className="login-brand"><div className="brand-mark brand-mark-large"><Bird size={27} /></div><div className="brand-name brand-name-light">CROW<span>DESK</span></div></div>
+      <div className="login-brand"><div className="brand-mark brand-mark-large"><Image src="/crow-logo.png" alt="Crow.lk logo" width={32} height={32} priority /></div><div className="brand-name brand-name-light">CROW<span>DESK</span></div></div>
       <div className="login-hero">
         <div className="eyebrow"><span className="eyebrow-line" /> YOUR WORKDAY, CONNECTED</div>
         <h1>Great work<br />starts <em>here.</em></h1>
@@ -47,7 +48,7 @@ function LoginForm() {
     </div>
     <div className="login-right">
       <div className="login-card-wrap">
-        <div className="login-mobile-brand"><div className="brand-mark"><Bird size={22} /></div><div className="brand-name">CROW<span>DESK</span></div></div>
+        <div className="login-mobile-brand"><div className="brand-mark"><Image src="/crow-logo.png" alt="Crow.lk logo" width={27} height={27} /></div><div className="brand-name">CROW<span>DESK</span></div></div>
         <div className="login-card-heading"><div className="login-kicker">WELCOME BACK</div><h2>Sign in to your space</h2><p>Use your Crow.lk work account to continue.</p></div>
         <form onSubmit={submit} className="login-form">
           <label htmlFor="email">Work email</label>
