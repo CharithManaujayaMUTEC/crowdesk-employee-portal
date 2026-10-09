@@ -157,7 +157,9 @@ jobs:
         run: |
           set -euo pipefail
 
-          ssh -F "$HOME/.ssh/config" \
+          : "${DEPLOY_PATH:?Missing DEPLOY_PATH secret}"
+
+          ssh -F "$HOME/.ssh/config" production \
             "DEPLOY_PATH='$DEPLOY_PATH' bash -s" <<'REMOTE'
           set -euo pipefail
 
@@ -169,5 +171,5 @@ jobs:
           test -d _next/static
           test -s .htaccess
 
-          echo "Crow Desk static website deployed successfully."
-          REMOTE
+          echo "Crow Desk website deployed and verified successfully."
+          REMOTE            
